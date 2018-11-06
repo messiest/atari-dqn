@@ -7,10 +7,10 @@ ATARI_SHAPE = (4, 105, 84)
 
 
 class AtariDQN(nn.Module):
-    def __init__(self):
+    def __init__(self, actions):
         super(AtariDQN, self).__init__()
 
-        self.n_actions = 4  # how to set this from gym environment?
+        self.n_actions = actions  # how to set this from gym environment?
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=8, stride=4)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
