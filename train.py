@@ -19,7 +19,8 @@ from src.utils import ReplayMemory, HuberLoss, preprocess, select_action
 from src.utils import Transition, optimize_model, get_screen, plot_durations
 
 
-env = gym.make('BreakoutDeterministic-v4') # .unwrapped
+# env = gym.make('BreakoutDeterministic-v4').unwrapped
+env = gym.make('CartPole-v0').unwrapped
 env.reset()
 
 plt.ion()
@@ -31,7 +32,7 @@ EPSILON_START = 0.9
 EPSILON_END = 0.05
 EPSILON_DECAY = 200
 TARGET_UPDATE = 10
-EPISODES = 10
+EPISODES = 10000
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
