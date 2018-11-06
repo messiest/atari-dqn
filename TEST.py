@@ -4,7 +4,8 @@ import gym
 import torch
 import numpy as np
 
-from src.utils import preprocess, transform_reward
+from src.utils import preprocess, transform_reward, ReplayMemory, HuberLoss
+from src.models import AtariDQN
 
 
 def main():
@@ -16,22 +17,32 @@ def main():
     env.render()
     step = 0
     is_done = False
+    mem = ReplayMemory(4)
     while not is_done:
-      # Perform a random action, returns the new frame, reward and whether the game is over
-      frame, reward, is_done, info = env.step(env.action_space.sample())
+        # Perform a random action, returns the new frame, reward and whether the game is over
+        # a_space = env.action_space
+        # print("a_space", a_space.shape)
 
+        a = env.action_space.sample()
+        print("\taction", a)
 
-      lives = info['ale.lives']
+        frame, reward, is_done, info = env.step(a)
 
+        mem.push(frame, a, frame, reward)
 
-      print("step:", step)
-      print("\tpreprocess", preprocess(frame))
-      print("\ttransformed reward:", transform_reward(reward))
+        lives = info['ale.lives']
 
-      step += 1
+        print("\tpreprocess", preprocess(frame))
+        print("\ttransformed reward:", transform_reward(reward))
 
-      # Render
-      env.render()
+        if is_done:
+            break
+
+        step += 1
+        # Render
+        env.render()
+
+    print(mem)
 
 
 if __name__ == "__main__":
