@@ -1,5 +1,8 @@
+import os
 import math
+import shutil
 import random
+import fnmatch
 from collections import deque, namedtuple
 
 import numpy as np
@@ -121,8 +124,7 @@ def optimize_model(model, target, replay_memory, optimizer):
     optimizer.zero_grad()
     loss.backward()
 
-    for param in model.parameters():
-        param.grad.data.clamp_(-1, 1)  # clip reward values, inplace
+    model.clip()  # clip reward values, inplace
     optimizer.step()
 
 
@@ -146,26 +148,42 @@ def get_screen(env):
     return preprocess(screen).unsqueeze(0).to(DEVICE)
 
 
-def plot_durations(durations):
+def plot_durations(env_name, durations):
     plt.figure(2)
     plt.clf()
     durations_t = torch.tensor(durations, dtype=torch.float)
     plt.title('Training...')
     plt.xlabel('Episode')
     plt.ylabel('Duration')
-    plt.plot(durations_t.numpy())
+    plt.plot(durations_t.numpy(), alpha=0.5)
     if len(durations_t) >= 100:
         means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
         means = torch.cat((torch.zeros(99), means))
-        plt.plt(means.numpy())
+        plt.plot(means.numpy())
 
     plt.pause(0.001)
     if is_ipython:
         display.clear_output(wait=True)
         display.display(plt.gcf())
 
-    if len(durations_t) % 1000 == 0 and len(durations_t) != 0:
-        plt.savefig('assets/results.png')
+    if len(durations_t) % 10 == 0 and len(durations_t) != 0:
+        plt.savefig(f'assets/{env_name}_results.png')
+
+
+def load_checkpoint():
+    pass
+
+
+def save_checkpoint(env_name, state_dict, save_dir='checkpoints/', update=True):
+    episode = state_dict['episode']
+    file_template = f"{env_name}_*.pth.tar"
+    if update:
+        checkpoints = fnmatch.filter(os.listdir(save_dir), file_template)
+        for chk in checkpoints:
+            os.remove(os.path.join(save_dir, chk))
+    filename = f"{env_name}_{episode}.pth.tar"
+    file_path = os.path.join(save_dir, filename)
+    torch.save(state_dict, file_path)
 
 
 if __name__ == "__main__":

@@ -24,3 +24,7 @@ class AtariDQN(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return x
+
+    def clip(self):
+        for param in self.parameters():
+            param.grad.data.clamp_(-1, 1)
