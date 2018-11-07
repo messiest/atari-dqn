@@ -26,4 +26,4 @@ nvidia-smi
 cat /proc/driver/nvidia/version
 
 # Start jupyter
-xvfb-run -s "-screen 0 1400x900x24" jupyter notebook
+xvfb-run -s "-screen 0 1400x900x24" python train.py CartPole-v1 10000

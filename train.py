@@ -62,7 +62,7 @@ def train():
         env.reset()
         last_screen = get_screen(env)
         current_screen = get_screen(env)
-        state = current_screen - last_screen
+        state = (current_screen - last_screen).to(DEVICE)
         for t in count():
             env.render()
             action = select_action(policy_net, state, step)
