@@ -10,6 +10,8 @@ class AtariDQN(nn.Module):
     def __init__(self, actions):
         super(AtariDQN, self).__init__()
 
+        self.gpu = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.n_actions = actions  # how to set this from gym environment?
 
         self.conv1 = nn.Conv2d(1, 16, kernel_size=8, stride=4)
@@ -18,6 +20,7 @@ class AtariDQN(nn.Module):
         self.fc2 = nn.Linear(256, self.n_actions)
 
     def forward(self, x):
+        x = x.to(self.gpu)
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view(x.size(0), -1)
