@@ -89,6 +89,7 @@ def select_action(model, state, step):
     epsilon = get_epsilon(step)
     if rand > epsilon:
         with torch.no_grad():
+            state = state.to(DEVICE)
             return model(state).max(1)[1].view(1, 1).to(DEVICE)
     else:
         n = model.n_actions
