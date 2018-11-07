@@ -167,7 +167,7 @@ def plot_durations(env_name, durations):
         display.display(plt.gcf())
 
     if len(durations_t) % 10 == 0 and len(durations_t) != 0:
-        plt.savefig(f'assets/{env_name}_results.png')
+        plt.savefig(f'assets/{env_name}_durations.png')
 
 
 def load_checkpoint():
