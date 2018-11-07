@@ -106,7 +106,7 @@ def optimize_model(model, target, replay_memory, optimizer):
     batch = Transition(*zip(*transitions))
 
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=DEVICE, dtype=torch.uint8)
-    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None]).to(DEVICE)
 
     state_batch = torch.cat(batch.state)
     action_batch = torch.cat(batch.action)
