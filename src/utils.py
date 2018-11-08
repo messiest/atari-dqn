@@ -18,8 +18,10 @@ is_ipython = 'inline' in matplotlib.get_backend()
 if is_ipython:
     print("iPython")
     from IPython import display
-
 plt.ion()
+
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 GAMMA = 0.999
@@ -27,7 +29,6 @@ EPSILON_START = 0.9
 EPSILON_END = 0.05
 EPSILON_DECAY = 200
 BATCH_SIZE = 128
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 STEPS = 0
 

@@ -20,6 +20,9 @@ from src.utils import ReplayMemory, HuberLoss, Transition, save_checkpoint
 from src.utils import select_action, optimize_model, get_screen, plot_durations
 
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('environment', type=str)
 parser.add_argument('-episodes', '--N', type=int, default=10000)
@@ -45,13 +48,11 @@ EPSILON_DECAY = 200
 TARGET_UPDATE = 10
 EPISODES = args.N
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 
 def train():
     env.render()
-    policy_net = AtariDQN(env.action_space.n)
-    target_net = AtariDQN(env.action_space.n)
+    policy_net = AtariDQN(env.action_space.n).to(DEVICE)
+    target_net = AtariDQN(env.action_space.n).to(DEVICE)
     target_net.load_state_dict(policy_net.state_dict())
     target_net.eval()
     optimizer = optim.RMSprop(policy_net.parameters())
@@ -62,14 +63,14 @@ def train():
         env.reset()
         last_screen = get_screen(env)
         current_screen = get_screen(env)
-        state = (current_screen - last_screen).to(DEVICE)
+        state = current_screen - last_screen  # .to(DEVICE)
         for t in count():
             env.render()
             action = select_action(policy_net, state, step)
             step += 1
             a = action.item()
             frame, reward, is_done, info = env.step(a)
-            reward = torch.tensor([reward])
+            reward = torch.tensor([reward], device=DEVICE)
             last_screen = current_screen
             current_screen = get_screen(env)
             if not is_done:
