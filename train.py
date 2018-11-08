@@ -93,7 +93,7 @@ def train():
             save_checkpoint(
                 f"{ENVIRONMENT}",
                 {
-                    'episode': episode + 1,
+                    'episode': episode,
                     'step': step,
                     'state_dict': policy_net.state_dict(),
                     'optimizer' : optimizer.state_dict(),

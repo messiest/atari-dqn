@@ -52,19 +52,6 @@ class HuberLoss(nn.Module):
         return loss
 
 
-def preprocess(frame):
-    tsfm = [
-        transforms.ToPILImage(),
-        transforms.Grayscale(),
-        transforms.Resize((84, 84)),
-        transforms.ToTensor(),
-    ]
-    process = transforms.Compose(tsfm)
-    img = process(frame)
-
-    return img
-
-
 class ReplayMemory(object):
     def __init__(self, capacity):
         self.capacity = capacity
@@ -83,6 +70,19 @@ class ReplayMemory(object):
 
     def __len__(self):
         return len(self.memory)
+
+
+def preprocess(frame):
+    tsfm = [
+        transforms.ToPILImage(),
+        transforms.Grayscale(),
+        transforms.Resize((84, 84)),
+        transforms.ToTensor(),
+    ]
+    process = transforms.Compose(tsfm)
+    img = process(frame)
+
+    return img
 
 
 def select_action(model, state, step):
@@ -135,11 +135,8 @@ def transform_reward(reward):
     return r.clamp(-1, 1)
 
 
-def get_epsilon(step):
-    e = EPSILON_END + (EPSILON_START - EPSILON_END) * \
-            math.exp(-1 * step / EPSILON_DECAY)
-
-    return e
+def get_epsilon(step, eps_end=EPSILON_END, eps_start=EPSILON_START, eps_decay=EPSILON_DECAY):
+    return eps_end + (eps_start - eps_end) * math.exp(-1 * step / eps_decay)
 
 
 def get_screen(env):
@@ -172,8 +169,13 @@ def plot_durations(env_name, durations):
         plt.savefig(f'assets/{env_name}_durations.png')
 
 
-def load_checkpoint():
-    pass
+def load_checkpoint(checkpoint_path):
+    checkpoint = torch.load(checkpoint_path)
+    state_dict = checkpoint['state_dict']
+    optim_state_dict = checkpoint['optimizer']
+    starting_episode = checkpoint['episode']
+
+    return state_dict, optim_state_dict, starting_episode
 
 
 def save_checkpoint(env_name, state_dict, save_dir='checkpoints/', update=True):
