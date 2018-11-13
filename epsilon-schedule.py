@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from src.utils import get_epsilon
+from utils import get_epsilon
 
 sns.set_style('whitegrid')
 

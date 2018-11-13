@@ -15,9 +15,9 @@ from PIL import Image
 import matplotlib
 import matplotlib.pyplot as plt
 
-from src.models import AtariDQN
-from src.utils import ReplayMemory, HuberLoss, Transition, save_checkpoint
-from src.utils import select_action, optimize_model, get_screen, plot_durations
+from models import AtariDQN
+from utils import ReplayMemory, HuberLoss, Transition, save_checkpoint
+from utils import select_action, optimize_model, get_screen, plot_durations
 
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -26,11 +26,11 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 parser = argparse.ArgumentParser()
 parser.add_argument('environment', type=str)
 parser.add_argument('-episodes', '--N', type=int, default=10000)
+parser.add_argument('-plotting', action='store_true')
 
 args = parser.parse_args()
 
 print(args)
-
 
 ENVIRONMENT = args.environment
 
@@ -84,10 +84,11 @@ def train():
                 print(f"Step {step: 6d} | Episode {episode} | Action {a} | Reward {int(reward.item()):3d}")
                 # Plotting
                 episode_durations.append(t + 1)
-                plot_durations(
-                    f"{ENVIRONMENT}",
-                    episode_durations,
-                )
+                if args.plotting:
+                    plot_durations(
+                        f"{ENVIRONMENT}",
+                        episode_durations,
+                    )
                 break
         if episode % TARGET_UPDATE == 0 and episode != 0:
             save_checkpoint(

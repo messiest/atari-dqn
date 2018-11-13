@@ -1,7 +1,7 @@
 import os
 
-from src.models import AtariDQN
-from src.utils import load_checkpoint
+from models import AtariDQN
+from utils import load_checkpoint
 
 
 CHECKPOINT_PATH = os.path.join("checkpoints", "CartPole-v1_71.pth.tar")
