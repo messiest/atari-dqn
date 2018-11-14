@@ -1,3 +1,5 @@
+import requests
+
 class FontColor:
     PURPLE = '\033[95m'
     CYAN = '\033[96m'
@@ -10,3 +12,10 @@ class FontColor:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
     ALL_COLORS = [PURPLE, CYAN, DARKCYAN, BLUE, GREEN, YELLOW, RED]
+
+
+def fetch_name():
+    URL = r"https://frightanic.com/goodies_content/docker-names.php"
+    r = requests.get(URL)
+
+    return r.text

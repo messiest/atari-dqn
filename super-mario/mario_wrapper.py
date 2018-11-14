@@ -157,5 +157,6 @@ def wrap_mario(env):
 def create_mario_env(env_id):
     env = gym_super_mario_bros.make(env_id)
     env = BinarySpaceToDiscreteSpaceEnv(env, COMPLEX_MOVEMENT)
+    # env = gym.wrappers.Monitor(env, 'playback/', force=True)
     env = wrap_mario(env)
     return env

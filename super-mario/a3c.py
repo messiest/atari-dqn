@@ -18,6 +18,10 @@ from actor_critic import ActorCritic
 from mario_actions import ACTIONS
 from mario_wrapper import create_mario_env
 from shared_adam import SharedAdam
+from utils import fetch_name
+
+
+RUN_ID = fetch_name().strip()
 
 
 def ensure_shared_grads(model, shared_model):
@@ -44,6 +48,8 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
     ByteTensor = torch.cuda.ByteTensor if torch.cuda.is_available() else torch.ByteTensor
 
     env = create_mario_env(args.env_name)
+    # env = gym.wrappers.Monitor(env, 'playback/', force=True)
+
     # env.seed(args.seed + rank)
 
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
@@ -187,8 +193,8 @@ def test(rank, args, shared_model, counter):
     ByteTensor = torch.cuda.ByteTensor if torch.cuda.is_available() else torch.ByteTensor
 
     env = create_mario_env(args.env_name)
-
-    # env = gym.wrappers.Monitor(env, 'playback/', force=True)
+    if args.record:
+        env = gym.wrappers.Monitor(env, 'playback/', force=True)
 
     # env.seed(args.seed + rank)
 
@@ -206,10 +212,12 @@ def test(rank, args, shared_model, counter):
 
     save_file = os.getcwd() + '/save/mario_performance.csv'
 
-    title = ['Time', 'Steps', 'Total Reward', 'Episode Length']
-    with open(save_file, 'a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(title)
+    if not os.path.exists(save_file):
+        print("Generating new record file.")
+        title = ['ID', 'Time', 'Steps', 'Total Reward', 'Episode Length']
+        with open(save_file, 'a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(title)
 
     start_time = time.time()
 
@@ -253,7 +261,8 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}".format(
+            print("ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}".format(
+                RUN_ID,
                 time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
                 counter.value,
                 counter.value / (stop_time - start_time),
@@ -262,6 +271,7 @@ def test(rank, args, shared_model, counter):
             ))
 
             data = [
+                RUN_ID,
                 stop_time - ep_start_time,
                 counter.value,
                 counter.value / (stop_time - start_time),
@@ -271,7 +281,10 @@ def test(rank, args, shared_model, counter):
 
             with open(save_file, 'a', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow([data])
+                writer.writerows([data])
+
+            # for video_path, meta_path in env.videos:
+            #     print("VIDEOS:", video_path, meta_path)
 
             reward_sum = 0
             episode_length = 0
