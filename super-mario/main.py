@@ -28,7 +28,7 @@ parser.add_argument('--seed', type=int, default=4, help='random seed (default: 4
 parser.add_argument('--num-processes', type=int, default=multiprocessing.cpu_count(), help='how many training processes to use (default: 4)')
 parser.add_argument('--num-steps', type=int, default=50, help='number of forward steps in A3C (default: 50)')
 parser.add_argument('--max-episode-length', type=int, default=1000000, help='maximum length of an episode (default: 1000000)')
-parser.add_argument('--env-name', default='SuperMarioBros-1-1-v3', help='environment to train on (default: SuperMarioBros-1-1-v3)')
+parser.add_argument('--env-name', default='SuperMarioBros-1-1-v0', help='environment to train on (default: SuperMarioBros-1-1-v0)')
 parser.add_argument('--no-shared', default=False, help='use an optimizer without shared momentum.')
 parser.add_argument('--use-cuda', default=True, help='run on gpu.')
 parser.add_argument('--record', default=False, help='record playback of tests')

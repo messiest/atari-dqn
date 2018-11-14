@@ -9,4 +9,6 @@ xvfb-run -s "-screen 0 1400x900x24" python main.py --env-name $ENVIRONMENT --rec
 ls checkpoints/
 
 git add checkpoints/
-git commit -a -m "AUTO COMMIT UPDATING $ENVIRONMENT CHECKPOINTS"
+git add playback/
+git add save/
+git commit -a -m "AUTO COMMIT UPDATING $ENVIRONMENT CHECKPOINTS AND RECORDS"
