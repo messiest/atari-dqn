@@ -50,8 +50,8 @@ class ActorCritic(nn.Module):
             normalized_columns_initializer(self.critic_linear.weight.data, 1.0)
         self.critic_linear.bias.data.fill_(0)
 
-        self.lstm.bias_ih._fill(0)
-        self.lstm.bias_hh._fill(0)
+        self.lstm.bias_ih.data.fill_(0)
+        self.lstm.bias_hh.data.fill_(0)
 
         self.train()  # enter training mode
 

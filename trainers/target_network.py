@@ -124,6 +124,9 @@ class TargetNetwork(object):
                 dtype=torch.long,
             )
 
+    def close(self):
+        self.env.close()
+
 
 if __name__ == "__main__":
     model = AtariDQN
