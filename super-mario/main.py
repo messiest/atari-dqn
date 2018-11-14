@@ -41,6 +41,7 @@ mp = _mp.get_context('spawn')
 
 if __name__ == "__main__":
     os.environ['OMP_NUM_THREADS'] = '1'
+    os.environ['CUDA_VISIBLE_DEVICES'] = ""
     env = create_mario_env(args.env_name)
     # env = gym.wrappers.Monitor(env, "playback", force=True)
     shared_model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
