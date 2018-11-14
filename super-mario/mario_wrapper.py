@@ -70,8 +70,8 @@ class ProcessMarioFrame(gym.Wrapper):
 
         return _process_frame(self.env.reset())
 
-    def change_level(self, level):
-        self.env.change_level(level)
+    # def change_level(self, level):
+    #     self.env.change_level(level)
 
 
 class FrameBuffer(gym.Wrapper):
@@ -113,8 +113,8 @@ class FrameBuffer(gym.Wrapper):
 
         return frame
 
-    def change_level(self, level):
-        self.env.change_level(level)
+    # def change_level(self, level):
+    #     self.env.change_level(level)
 
 
 class NormalizedEnv(gym.ObservationWrapper):
@@ -143,8 +143,8 @@ class NormalizedEnv(gym.ObservationWrapper):
         else:
             return obs
 
-    def change_level(self, level):
-        self.env.change_level(level)
+    # def change_level(self, level):
+    #     self.env.change_level(level)
 
 
 def wrap_mario(env):

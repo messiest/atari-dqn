@@ -41,7 +41,7 @@ class SharedAdam(optim.Adam):
                 state['step'] += 1
 
                 if group['weight_decay'] != 0:
-                    grad = grad.add(group['weight_decay'], p.data)
+                    grad = grad.add(group['weight_decay'], p)  # p.data
 
                 exp_avg.mul_(beta1).add_(1 - beta1, grad)
                 exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
@@ -53,6 +53,6 @@ class SharedAdam(optim.Adam):
 
                 step_size = group['lr'] * math.sqrt(bias_correct2) / bias_correct1
 
-                p.addcdiv_(-step_size, exp_avg, denom)
+                p = torch.addcdiv(p, -step_size, exp_avg, denom)
 
         return loss

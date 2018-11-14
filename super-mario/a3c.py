@@ -44,7 +44,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
     ByteTensor = torch.cuda.ByteTensor if torch.cuda.is_available() else torch.ByteTensor
 
     env = create_mario_env(args.env_name)
-    env.seed(args.seed + rank)
+    # env.seed(args.seed + rank)
 
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
     if torch.cuda.is_available():
@@ -63,12 +63,16 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
         if rank == 0:
             env.render()
             if t % args.save_interval == 0 and t > 0:
+                for file in os.listdir('checkpoints/'):
+                    os.remove(os.path.join('checkpoints', file))
                 torch.save(
                     shared_model.state_dict(),
                     os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.pkl")
                 )
 
         if t % args.save_interval == 0 and t > 0 and rank == 1:
+            for file in os.listdir('checkpoints/'):
+                os.remove(os.path.join('checkpoints', file))
             torch.save(
                 shared_model.state_dict(),
                 os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.pkl")
@@ -162,11 +166,11 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
 
         total_loss = policy_loss + args.value_loss_coef * value_loss
 
-        print(f"Process {rank} loss:", total_loss.data)
+        print(f"Process {rank: 2d} loss: {total_loss.item(): 4.2f}")
 
         optimizer.zero_grad()
         (total_loss).backward()
-        nn.utils.clip_grad_norm(model.parameters(), args.max_grad_norm)
+        nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
         ensure_shared_grads(model, shared_model)
 
@@ -186,7 +190,7 @@ def test(rank, args, shared_model, counter):
 
     # env = gym.wrappers.Monitor(env, 'playback/', force=True)
 
-    env.seed(args.seed + rank)
+    # env.seed(args.seed + rank)
 
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
     if torch.cuda.is_available():
@@ -235,7 +239,7 @@ def test(rank, args, shared_model, counter):
 
         action_out = ACTIONS[action]  #[0, 0]
 
-        print("ACTION OUT 2", action_out)
+        # print("ACTION OUT 2", action_out)
 
         state, reward, done, _ = env.step(action.item())
         env.render()
@@ -249,7 +253,7 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("Time: {}, Num Steps: {}, FPS: {}, Episode Reward: {}, Episode Length: {}".format(
+            print("Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}".format(
                 time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
                 counter.value,
                 counter.value / (stop_time - start_time),
@@ -272,13 +276,11 @@ def test(rank, args, shared_model, counter):
             reward_sum = 0
             episode_length = 0
             actions.clear()
-            time.sleep(60)
-            env.locked_levels = [False] + [True] * 31
-            env.change_level(0)
+            # env.locked_levels = [False] + [True] * 31
+            # env.change_level(0)
             state = env.reset()
 
         state = torch.from_numpy(state)
-
 
 
 if __name__ == "__main__":
