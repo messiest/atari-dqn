@@ -69,7 +69,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
         if rank == 0:
             # env.render()
             if t % args.save_interval == 0 and t > 0:
-                for file in os.listdir('checkpoints/'):
+                for file in filter(os.listdir('checkpoints/'), args.env_name + "*"):
                     os.remove(os.path.join('checkpoints', file))
                 torch.save(
                     dict(
@@ -79,7 +79,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
                         model_state_dict=shared_model.state_dict(),
                         optimizer_state_dict=optimizer.state_dict(),
                     ),
-                    os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.tar")
+                    os.path.join("checkpoints", f"{args.env_name}_a3c_params.tar")
                 )
 
         if t % args.save_interval == 0 and t > 0 and rank == 1:
@@ -93,7 +93,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
                     model_state_dict=shared_model.state_dict(),
                     optimizer_state_dict=optimizer.state_dict(),
                 ),
-                os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.tar")
+                os.path.join("checkpoints", f"{args.env_name}_a3c_params.tar")
             )
 
         model.load_state_dict(shared_model.state_dict())
@@ -259,7 +259,7 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("Environment: {}, ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}, Distance: {}".format(
+            print("{} | ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Reward: {}, Episode Length: {}, Distance: {}".format(
                     args.env_name,
                     args.model_id,
                     time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
