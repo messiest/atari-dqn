@@ -55,9 +55,6 @@ def restore_checkpoint(env_id, dir=args.checkpoint_dir):
     return checkpoint
 
 
-def limit_run_time(func)
-
-
 if __name__ == "__main__":
     os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
