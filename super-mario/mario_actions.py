@@ -1,5 +1,5 @@
 import numpy as np
-from gym_super_mario_bros.actions import COMPLEX_MOVEMENT
+from gym_super_mario_bros.actions import COMPLEX_MOVEMENT, RIGHT_ONLY, SIMPLE_MOVEMENT
 
 ACTIONS = np.array([
     [0, 0, 0, 0, 0, 0],  # null action must come first
@@ -19,4 +19,4 @@ ACTIONS = np.array([
 ])
 
 
-ACTIONS = COMPLEX_MOVEMENT
+ACTIONS = SIMPLE_MOVEMENT

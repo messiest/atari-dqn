@@ -1,6 +1,7 @@
 import os
 import time
 import csv
+from fnmatch import filter
 from collections import deque
 from itertools import count
 
@@ -13,15 +14,13 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+from fuzzywuzzy import process
 
 from actor_critic import ActorCritic
 from mario_actions import ACTIONS
 from mario_wrapper import create_mario_env
 from shared_adam import SharedAdam
-from utils import fetch_name
-
-
-RUN_ID = fetch_name().strip()
+from utils import fetch_name, FontColor
 
 
 def ensure_shared_grads(model, shared_model):
@@ -41,7 +40,8 @@ def choose_action(model, state, hx, cx):
 def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample=True):
     torch.manual_seed(args.seed + rank)
 
-    print(f"Process No: {rank: 3d} | Sampling: {select_sample}")
+    text_color = FontColor.RED if select_sample else FontColor.GREEN
+    print(text_color + f"Process No: {rank: 3d} | Sampling: {select_sample}", FontColor.END)
 
     FloatTensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
     DoubleTensor = torch.cuda.DoubleTensor if torch.cuda.is_available() else torch.DoubleTensor
@@ -65,23 +65,35 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
     done = True
 
     episode_length = 0
-    for t in count():
+    for t in count(start=int(args.start_step)):
         if rank == 0:
-            env.render()
+            # env.render()
             if t % args.save_interval == 0 and t > 0:
                 for file in os.listdir('checkpoints/'):
                     os.remove(os.path.join('checkpoints', file))
                 torch.save(
-                    shared_model.state_dict(),
-                    os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.pkl")
+                    dict(
+                        env=args.env_name,
+                        id=args.model_id,
+                        step=t,
+                        model_state_dict=shared_model.state_dict(),
+                        optimizer_state_dict=optimizer.state_dict(),
+                    ),
+                    os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.tar")
                 )
 
         if t % args.save_interval == 0 and t > 0 and rank == 1:
-            for file in os.listdir('checkpoints/'):
+            for file in filter(os.listdir('checkpoints/'), args.env_name + "*"):
                 os.remove(os.path.join('checkpoints', file))
             torch.save(
-                shared_model.state_dict(),
-                os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.pkl")
+                dict(
+                    env=args.env_name,
+                    id=args.model_id,
+                    step=t,
+                    model_state_dict=shared_model.state_dict(),
+                    optimizer_state_dict=optimizer.state_dict(),
+                ),
+                os.path.join("checkpoints", f"{env.spec.id}_a3c_params_{t}.tar")
             )
 
         model.load_state_dict(shared_model.state_dict())
@@ -100,9 +112,9 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
 
         for step in range(args.num_steps):
             episode_length += 1
-            # state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
-            # value, logit, (hx, cx) = model((state_inp, (hx, cx)))
-            value, logit, (hx, cx) = model((state.unsqueeze(0), (hx, cx)))
+            state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
+            value, logit, (hx, cx) = model((state_inp, (hx, cx)))
+            # value, logit, (hx, cx) = model((state.unsqueeze(0), (hx, cx)))
 
             prob = F.softmax(logit, dim=-1)
             log_prob = F.log_softmax(logit, dim=-1)
@@ -114,30 +126,24 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
             else:
                 action = prob.max(-1, keepdim=True)[1].data
 
-            # print("ACTION:", action)
-
             log_prob = log_prob.gather(-1, Variable(action))
 
-            # print("LOG PROB:", log_prob)
-
             action_out = ACTIONS[action]
-            # print("ACTION OUT", action_out)
 
-            state, reward, done, _ = env.step(action.item())
+            state, reward, done, info = env.step(action.item())
+
+            # print(info)
 
             done = done or episode_length >= args.max_episode_length
-            reward = max(min(reward, 50), -50)
+            reward = max(min(reward, 15), -15)  # as per gym-super-mario-bros
 
             with lock:
                 counter.value +=1
 
             if done:
                 episode_length = 0
-                # env.change_level(0)
                 state = env.reset()
-                print(f"Process {rank} has completed.")
 
-            env.locked_levels = [False] + [True] * 31
             state = torch.from_numpy(state)
             values.append(value)
             log_probs.append(log_prob)
@@ -150,7 +156,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
         if not done:
             state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
             value, _, _ = model((state_inp, (hx, cx)))
-            R = value.data
+            R = value.detach()
 
         values.append(Variable(R).type(FloatTensor))
         policy_loss = 0
@@ -168,11 +174,11 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
             delta_t = rewards[i] + args.gamma * values[i + 1].data - values[i].data
             gae = gae * args.gamma * args.tau + delta_t
 
-            policy_loss = policy_loss - log_probs[i] * Variable(gae).type(FloatTensor) - args.entropy_coef * entropies[i]
+            policy_loss = policy_loss - \
+                log_probs[i] * Variable(gae).type(FloatTensor) - \
+                args.entropy_coef * entropies[i]
 
         total_loss = policy_loss + args.value_loss_coef * value_loss
-
-        print(f"Process {rank: 2d} loss: {total_loss.item(): 4.2f}")
 
         optimizer.zero_grad()
         (total_loss).backward()
@@ -181,8 +187,6 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
         ensure_shared_grads(model, shared_model)
 
         optimizer.step()
-
-    print(f"Process {rank} closed.")
 
 
 def test(rank, args, shared_model, counter):
@@ -206,27 +210,21 @@ def test(rank, args, shared_model, counter):
     state = env.reset()
     state = torch.from_numpy(state)
 
-    reward_sum = 0
-
-    done = True
-
     save_file = os.getcwd() + '/save/mario_performance.csv'
 
     if not os.path.exists(save_file):
-        print("Generating new record file.")
         title = ['ID', 'Time', 'Steps', 'Total Reward', 'Episode Length']
         with open(save_file, 'a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(title)
 
     start_time = time.time()
-
-    actions = deque(maxlen=4000)
+    reward_sum = 0
+    done = True
     episode_length = 0
+    actions = deque(maxlen=4000)
     while True:
         episode_length += 1
-        ep_start_time = time.time()
-
         # shared model sync
         if done:
             model.load_state_dict(shared_model.state_dict())
@@ -241,17 +239,17 @@ def test(rank, args, shared_model, counter):
 
         with torch.no_grad():
             state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
+
         value, logit, (hx, cx) = model((state_inp, (hx, cx)))
         prob = F.softmax(logit, dim=-1)
         action = prob.max(-1, keepdim=True)[1]
 
-        action_out = ACTIONS[action]  #[0, 0]
+        action_out = ACTIONS[action]
 
-        # print("ACTION OUT 2", action_out)
-
-        state, reward, done, _ = env.step(action.item())
+        state, reward, done, info = env.step(action.item())
         env.render()
         done = done or episode_length >= args.max_episode_length
+
         reward_sum += reward
 
         actions.append(action[0, 0])
@@ -261,18 +259,22 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}".format(
-                RUN_ID,
-                time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
-                counter.value,
-                counter.value / (stop_time - start_time),
-                reward_sum,
-                episode_length,
-            ))
+            print("Environment: {}, ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Episode Reward: {}, Episode Length: {}, Distance: {}".format(
+                    args.env_name,
+                    args.model_id,
+                    time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
+                    counter.value,
+                    counter.value / (stop_time - start_time),
+                    reward_sum,
+                    episode_length,
+                    info['x_pos'],
+                ),
+                end='\r',
+            )
 
             data = [
-                RUN_ID,
-                stop_time - ep_start_time,
+                args.model_id,
+                stop_time - start_time,
                 counter.value,
                 counter.value / (stop_time - start_time),
                 reward_sum,
@@ -283,14 +285,9 @@ def test(rank, args, shared_model, counter):
                 writer = csv.writer(file)
                 writer.writerows([data])
 
-            # for video_path, meta_path in env.videos:
-            #     print("VIDEOS:", video_path, meta_path)
-
             reward_sum = 0
             episode_length = 0
             actions.clear()
-            # env.locked_levels = [False] + [True] * 31
-            # env.change_level(0)
             state = env.reset()
 
         state = torch.from_numpy(state)

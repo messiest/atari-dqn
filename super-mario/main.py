@@ -8,17 +8,18 @@ import tqdm
 import gym
 import torch
 import torch.multiprocessing as _mp
+from fuzzywuzzy import process
 
 from actor_critic import ActorCritic
 from shared_adam import SharedAdam
 from mario_wrapper import create_mario_env
 from mario_actions import ACTIONS
 from a3c import train, test
-from utils import FontColor
+from utils import FontColor, fetch_name
 
 
 parser = argparse.ArgumentParser(description='A3C')
-parser.add_argument('--lr', type=float, default=0.0001, help='learning rate (default: 0.0001)')
+parser.add_argument('--lr', type=float, default=0.001, help='learning rate (default: 0.0001)')
 parser.add_argument('--gamma', type=float, default=0.9, help='discount factor for rewards (default: 0.9)')
 parser.add_argument('--tau', type=float, default=1.00, help='parameter for GAE (default: 1.00)')
 parser.add_argument('--entropy-coef', type=float, default=0.01, help='entropy term coefficient (default: 0.01)')
@@ -26,25 +27,59 @@ parser.add_argument('--value-loss-coef', type=float, default=0.5, help='value lo
 parser.add_argument('--max-grad-norm', type=float, default=250, help='value loss coefficient (default: 50)')
 parser.add_argument('--seed', type=int, default=4, help='random seed (default: 4)')
 parser.add_argument('--num-processes', type=int, default=multiprocessing.cpu_count(), help='how many training processes to use (default: 4)')
-parser.add_argument('--num-steps', type=int, default=50, help='number of forward steps in A3C (default: 50)')
+parser.add_argument('--num-steps', type=int, default=100, help='number of forward steps in A3C (default: 50)')
 parser.add_argument('--max-episode-length', type=int, default=1000000, help='maximum length of an episode (default: 1000000)')
 parser.add_argument('--env-name', default='SuperMarioBros-1-1-v0', help='environment to train on (default: SuperMarioBros-1-1-v0)')
 parser.add_argument('--no-shared', default=False, help='use an optimizer without shared momentum.')
 parser.add_argument('--use-cuda', default=True, help='run on gpu.')
-parser.add_argument('--record', default=False, help='record playback of tests')
-parser.add_argument('--save-interval', type=int, default=100, help='model save interval (default: 10)')
-parser.add_argument('--non-sample', type=int,default=2, help='number of non sampling processes (default: 2)')
+parser.add_argument('--record', action='store_true', help='record playback of tests')
+parser.add_argument('--save-interval', type=int, default=10, help='model save interval (default: 10)')
+parser.add_argument('--non-sample', type=int, default=2, help='number of non sampling processes (default: 2)')
+parser.add_argument('--checkpoint-dir', type=str, default='checkpoints', help='directory to save checkpoints')
+parser.add_argument('--start-step', type=int, default=0, help='training step on which to start')
+parser.add_argument('--model-id', type=str, default=fetch_name().strip(), help='name id for the model')
+parser.add_argument('--start-fresh', action='store_true', help='start training a new model')
 
 args = parser.parse_args()
 
+
 mp = _mp.get_context('spawn')
+
+
+def restore_checkpoint(env_id, dir=args.checkpoint_dir):
+    file, p = process.extractOne(
+        env_id + '_a3c_params_*.tar',
+        os.listdir(dir)
+    )
+    # print(file)
+    checkpoint = torch.load(os.path.join(dir, file))
+    return checkpoint
+
 
 if __name__ == "__main__":
     os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
+
     env = create_mario_env(args.env_name)
-    # env = gym.wrappers.Monitor(env, "playback", force=True)
+    if args.record:
+        env = gym.wrappers.Monitor(env, "playback", force=True)
+
     shared_model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
+    optimizer = SharedAdam(shared_model.parameters(), lr=args.lr)
+    if os.listdir(args.checkpoint_dir) and not args.start_fresh:
+        checkpoint = restore_checkpoint(args.env_name)
+        assert args.env_name == checkpoint['env'], "Checkpoint is for different environment"
+        args.model_id = checkpoint['id']
+        args.start_step = checkpoint['step']
+        print("Environment:", args.env_name)
+        print("Loading agent:", args.model_id)
+        print("Start step:", args.start_step)
+        shared_model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    else:
+        print("Environment:", args.env_name)
+        print("New agent:", args.model_id)
 
     if torch.cuda.is_available():
         shared_model.cuda()
@@ -53,18 +88,11 @@ if __name__ == "__main__":
 
     torch.manual_seed(args.seed)
 
-    optimizer = SharedAdam(shared_model.parameters(), lr=args.lr)
-
     print(FontColor.BLUE + f"Number of available cores: {mp.cpu_count(): 2d}" + FontColor.END)
-
     processes = []
 
     counter = mp.Value('i', 0)
     lock = mp.Lock()
-
-    # pbar = tqdm.tqdm(total=100)
-    # def pbar_update(*a):
-    #     pbar.update()
 
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model, counter))
 
