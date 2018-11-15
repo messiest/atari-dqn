@@ -3,7 +3,7 @@
 ENVIRONMENT=$1
 
 echo Training $ENVIRONMENT model...
-env WARNTIME=60 WARNSIG=1 KILLTIME=30 timelimit xvfb-run -s "-screen 0 1400x900x24" python main.py --env-name $ENVIRONMENT --record True
+xvfb-run -s "-screen 0 1400x900x24" python main.py --env-name $ENVIRONMENT --record
 
 git add checkpoints/
 git add playback/
