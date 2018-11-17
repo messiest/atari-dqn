@@ -48,15 +48,16 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
     ByteTensor = torch.cuda.ByteTensor if torch.cuda.is_available() else torch.ByteTensor
 
     env = create_mario_env(args.env_name)
-    # env = gym.wrappers.Monitor(env, 'playback/', force=True)
 
     # env.seed(args.seed + rank)
 
     model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
+
     if torch.cuda.is_available():
         model.cuda()
+
     if optimizer is None:
-        optimizer = optim.Adam(shared_model.parameters(), lr=LR)
+        optimizer = optim.Adam(shared_model.parameters(), lr=args.lr)
 
     model.train()
 
@@ -66,8 +67,8 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
 
     episode_length = 0
     for t in count(start=int(args.start_step)):
+    # while True:
         if rank == 0:
-            # env.render()
             if t % args.save_interval == 0 and t > 0:
                 for file in filter(os.listdir('checkpoints/'), args.env_name + "*"):
                     os.remove(os.path.join('checkpoints', file))
@@ -95,50 +96,57 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
                 ),
                 os.path.join("checkpoints", f"{args.env_name}_a3c_params.tar")
             )
-
+        # env.render()
         model.load_state_dict(shared_model.state_dict())
         if done:
-            cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
-            hx = Variable(torch.zeros(1, 512)).type(FloatTensor)
+            # cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
+            # hx = Variable(torch.zeros(1, 512)).type(FloatTensor)
+            cx = torch.zeros(1, 512)
+            hx = torch.zeros(1, 512)
         else:
-            cx = Variable(cx.data).type(FloatTensor)
-            hx = Variable(hx.data).type(FloatTensor)
+            # cx = Variable(cx.data).type(FloatTensor)
+            # hx = Variable(hx.data).type(FloatTensor)
+            cx = cx.detach()
+            hx = hx.detach()
 
         values = []
         log_probs = []
         rewards = []
         entropies = []
-        reason = ''
 
         for step in range(args.num_steps):
             episode_length += 1
-            state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
-            value, logit, (hx, cx) = model((state_inp, (hx, cx)))
-            # value, logit, (hx, cx) = model((state.unsqueeze(0), (hx, cx)))
+
+            # state_inp = Variable(state.unsqueeze(0)).type(FloatTensor)
+            # value, logit, (hx, cx) = model((state_inp, (hx, cx)))
+            value, logit, (hx, cx) = model((state.unsqueeze(0), (hx, cx)))
 
             prob = F.softmax(logit, dim=-1)
             log_prob = F.log_softmax(logit, dim=-1)
-            entropy = -(log_prob * prob).sum(-1, keepdim=True)
+            entropy = -(log_prob * prob).sum(1, keepdim=True)
             entropies.append(entropy)
 
-            if select_sample:
-                action = prob.multinomial(num_samples=1).data
-            else:
-                action = prob.max(-1, keepdim=True)[1].data
+            # if select_sample:
+                # action = prob.multinomial(num_samples=1).data
+                # action = prob.multinomial(num_samples=1).detach()
+            # else:
+                # action = prob.max(-1, keepdim=True)[1].data
+                # action = prob.max(-1, keepdim=True)[1].detach()
 
-            log_prob = log_prob.gather(-1, Variable(action))
+            # log_prob = log_prob.gather(-1, Variable(action))
+            action = prob.multinomial(num_samples=1).detach()
+            log_prob = log_prob.gather(1, action)
 
             action_out = ACTIONS[action]
 
-            state, reward, done, info = env.step(action.item())
-
             # print(info)
-
+            # state, reward, done, info = env.step(action.numpy())
+            state, reward, done, info = env.step(action.item())
             done = done or episode_length >= args.max_episode_length
             reward = max(min(reward, 15), -15)  # as per gym-super-mario-bros
 
             with lock:
-                counter.value +=1
+                counter.value += 1
 
             if done:
                 episode_length = 0
@@ -259,7 +267,7 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("{} | ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Reward: {}, Episode Length: {}, Distance: {}".format(
+            print("{} | ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Reward: {:.2f}, Episode Length: {}, Progress: {: 3.2f}%".format(
                     args.env_name,
                     args.model_id,
                     time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
@@ -267,7 +275,7 @@ def test(rank, args, shared_model, counter):
                     counter.value / (stop_time - start_time),
                     reward_sum,
                     episode_length,
-                    info['x_pos'],
+                    (info['x_pos'] / 3225) * 100,
                 ),
                 end='\r',
             )

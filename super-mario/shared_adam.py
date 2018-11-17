@@ -27,11 +27,11 @@ class SharedAdam(optim.Adam):
         loss = None
         if closure is not None:
             loss = closure()
+
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
                     continue
-
                 grad = p.grad.data
                 state = self.state[p]
 
@@ -41,18 +41,23 @@ class SharedAdam(optim.Adam):
                 state['step'] += 1
 
                 if group['weight_decay'] != 0:
-                    grad = grad.add(group['weight_decay'], p)  # p.data
+                    grad = grad.add(group['weight_decay'], p.data)  # p.data
 
+                # Decay 1st and 2nd momemnt running avg coef
                 exp_avg.mul_(beta1).add_(1 - beta1, grad)
                 exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
 
-                denom = torch.add(exp_avg_sq.sqrt(), group['eps'])
+                denom = exp_avg_sq.sqrt().add_(group['eps'])
 
-                bias_correct1 = 1 - beta1 ** state['step'][0].item()
-                bias_correct2 = 1 - beta2 ** state['step'][0].item()
-
+                # bias_correct1 = 1 - beta1 ** state['step'][0].item()  # was indexed as [0]
+                # bias_correct2 = 1 - beta2 ** state['step'][0].item()
+                bias_correct1 = 1 - beta1 ** state['step'].item()  # was indexed as [0]
+                bias_correct2 = 1 - beta2 ** state['step'].item()
                 step_size = group['lr'] * math.sqrt(bias_correct2) / bias_correct1
 
-                p = torch.addcdiv(p, -step_size, exp_avg, denom)
+                # TODO: This needs to be corrected. Inplace operations can't be
+                ## performed on parameters, and overwriting changes type to
+                p.data.addcdiv_(-step_size, exp_avg, denom)
+
 
         return loss

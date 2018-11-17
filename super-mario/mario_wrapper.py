@@ -38,27 +38,28 @@ class ProcessMarioFrame(gym.Wrapper):
         self.prev_dist = 40
 
     def step(self, action):
-        # print("ACTION STEP", action)
         obs, reward, is_done, info = self.env.step(action)
-        #
-        # reward = min(max((info['distance'] - self.prev_dist), 0), 2)
-        # self.prev_dist = info['distance']
-        #
-        # reward += (self.prev_time - info['time']) * -0.1
-        # self.prev_time = info['time']
-        #
-        # reward += (info['player_status'] - self.prev_stat) * 5
-        # self.prev_stat = info['player_status']
-        #
-        # reward += (info['score'] - self.prev_score)
-        # self.prev_score = info['score']
-        #
-        # if is_done:
-        #     if info['distance'] >= 3225:
-        #         reward += 50
-        #
-        #     else:
-        #         reward -= 50
+
+        reward = min(max((info['x_pos'] - self.prev_dist), 0), 2)
+        self.prev_dist = info['x_pos']
+
+        reward += (self.prev_time - info['time']) * -0.1
+        self.prev_time = info['time']
+
+        # reward += (info['status'] - self.prev_stat) * 5
+        # self.prev_stat = info['status']
+
+        reward += (info['score'] - self.prev_score)
+        self.prev_score = info['score']
+
+        if is_done:
+            if info['x_pos'] >= 3225:
+                reward += 50
+                # reward += 15
+
+            else:
+                reward -= 50
+                # reward -= 15
 
         return _process_frame(obs), reward, is_done, info
 
