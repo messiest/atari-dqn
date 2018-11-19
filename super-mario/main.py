@@ -33,12 +33,14 @@ parser.add_argument('--env-name', default='SuperMarioBros-v0', help='environment
 parser.add_argument('--no-shared', default=False, help='use an optimizer without shared momentum.')
 parser.add_argument('--use-cuda', default=True, help='run on gpu.')
 parser.add_argument('--record', action='store_true', help='record playback of tests')
-parser.add_argument('--save-interval', type=int, default=100, help='model save interval (default: 100)')
+parser.add_argument('--save-interval', type=int, default=10, help='model save interval (default: 100)')
 parser.add_argument('--non-sample', type=int, default=2, help='number of non sampling processes (default: 2)')
 parser.add_argument('--checkpoint-dir', type=str, default='checkpoints', help='directory to save checkpoints')
 parser.add_argument('--start-step', type=int, default=0, help='training step on which to start')
 parser.add_argument('--model-id', type=str, default=fetch_name().strip(), help='name id for the model')
 parser.add_argument('--start-fresh', action='store_true', help='start training a new model')
+parser.add_argument('--load-model', default=None, help='model name to restore')
+
 
 args = parser.parse_args()
 
@@ -47,6 +49,7 @@ mp = _mp.get_context('spawn')
 
 
 def restore_checkpoint(env_id, dir=args.checkpoint_dir):
+    print("ENV_ID", env_id)
     file, p = process.extractOne(
         env_id + '_a3c_params_*.tar',
         os.listdir(dir)
@@ -55,7 +58,7 @@ def restore_checkpoint(env_id, dir=args.checkpoint_dir):
     return checkpoint
 
 
-if __name__ == "__main__":
+def main(args):
     os.environ['OMP_NUM_THREADS'] = '1'
     os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
@@ -65,9 +68,12 @@ if __name__ == "__main__":
 
     shared_model = ActorCritic(env.observation_space.shape[0], len(ACTIONS))
     optimizer = SharedAdam(shared_model.parameters(), lr=args.lr)
-    if os.listdir(args.checkpoint_dir) and not args.start_fresh:
-        checkpoint = restore_checkpoint(args.env_name)
-        assert args.env_name == checkpoint['env'], "Checkpoint is for different environment"
+
+    if args.load_model:
+        checkpoint_file = f"{args.env_name}_{args.model_id}_a3c_params.tar"
+        checkpoint = restore_checkpoint(checkpoint_file)
+        assert args.env_name == checkpoint['env'], \
+            "Checkpoint is for different environment"
         args.model_id = checkpoint['id']
         args.start_step = checkpoint['step']
         print("Environment:", args.env_name)
@@ -91,14 +97,13 @@ if __name__ == "__main__":
     print(FontColor.BLUE + f"Number of available cores: {mp.cpu_count(): 2d}" + FontColor.END)
     processes = []
 
-    counter = mp.Value('i', 0)
+    counter = mp.Value('i', args.start_step)
     lock = mp.Lock()
 
     p = mp.Process(target=test, args=(args.num_processes, args, shared_model, counter))
 
     p.start()
     processes.append(p)
-
     num_processes = args.num_processes
     no_sample = args.non_sample  # count of non-sampling processes
 
@@ -109,10 +114,28 @@ if __name__ == "__main__":
 
     for rank in range(0, num_processes):
         if rank < sample_val:  # random action
-            p = mp.Process(target=train, args=(rank, args, shared_model, counter, lock, optimizer))
+            p = mp.Process(
+                target=train,
+                args=(rank, args, shared_model, counter, lock, optimizer),
+            )
         else:  # best action
-            p = mp.Process(target=train, args=(rank, args, shared_model, counter, lock, optimizer, False))
+            p = mp.Process(
+                target=train,
+                args=(rank, args, shared_model, counter, lock, optimizer, False),
+            )
         p.start()
         processes.append(p)
+        
     for p in processes:
         p.join()
+
+    # TODO: Find way to exit mp gracefully
+    # except KeyboardInterrupt:
+    #     for p in processes:
+    #         p.close()
+    #
+    #     print("Training halted")
+
+
+if __name__ == "__main__":
+    _ = main(args)

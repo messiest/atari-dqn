@@ -14,7 +14,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
-from fuzzywuzzy import process
 
 from actor_critic import ActorCritic
 from mario_actions import ACTIONS
@@ -30,12 +29,26 @@ def ensure_shared_grads(model, shared_model):
         shared_param._grad = param.grad
 
 def choose_action(model, state, hx, cx):
-    self.eval()  # set to eval mode
-    logits, _ = self.forward(s)
-    prob = F.softmax(logits, dim=1).data
-    m = self.distribution(prob)
+    model.eval()  # set to eval mode
+    _, logits, _ = model.forward((state.unsqueeze(0), (hx, cx)))
+    prob = F.softmax(logits, dim=-1).detach()
+    action = prob.max(-1, keepdim=True)[1]
 
-    return m.sample().numpy()[0]
+    return action
+
+def _print():
+    print("{} | ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Reward: {:.2f}, Episode Length: {}, Progress: {: 3.2f}%".format(
+            args.env_name,
+            args.model_id,
+            time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
+            counter.value,
+            counter.value / (stop_time - start_time),
+            reward_sum,
+            episode_length,
+            (info['x_pos'] / 3225) * 100,
+        ),
+        end='\r',
+    )
 
 def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample=True):
     torch.manual_seed(args.seed + rank)
@@ -66,46 +79,42 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
     done = True
 
     episode_length = 0
-    for t in count(start=int(args.start_step)):
-    # while True:
+    for t in count(start=counter.value):
         if rank == 0:
             if t % args.save_interval == 0 and t > 0:
-                for file in filter(os.listdir('checkpoints/'), args.env_name + "*"):
+                for file in filter(os.listdir('checkpoints/'), f"{args.env_name}_{args.model_id}_a3c_params.tar"):
                     os.remove(os.path.join('checkpoints', file))
                 torch.save(
                     dict(
                         env=args.env_name,
                         id=args.model_id,
-                        step=t,
+                        episode=t,
+                        step=episode_length,
                         model_state_dict=shared_model.state_dict(),
                         optimizer_state_dict=optimizer.state_dict(),
                     ),
-                    os.path.join("checkpoints", f"{args.env_name}_a3c_params.tar")
+                    os.path.join("checkpoints", f"{args.env_name}_{args.model_id}_a3c_params.tar")
                 )
 
-        if t % args.save_interval == 0 and t > 0 and rank == 1:
-            for file in filter(os.listdir('checkpoints/'), args.env_name + "*"):
+        if t % args.save_interval == 0 and t > 0:  # and rank == 1:
+            for file in filter(os.listdir('checkpoints/'), f"{args.env_name}_{args.model_id}_a3c_params.tar"):
                 os.remove(os.path.join('checkpoints', file))
             torch.save(
                 dict(
                     env=args.env_name,
                     id=args.model_id,
-                    step=t,
+                    step=counter.value,
                     model_state_dict=shared_model.state_dict(),
                     optimizer_state_dict=optimizer.state_dict(),
                 ),
-                os.path.join("checkpoints", f"{args.env_name}_a3c_params.tar")
+                os.path.join("checkpoints", f"{args.env_name}_{args.model_id}_a3c_params.tar")
             )
-        # env.render()
+        # env.render()  # don't render training environments
         model.load_state_dict(shared_model.state_dict())
         if done:
-            # cx = Variable(torch.zeros(1, 512)).type(FloatTensor)
-            # hx = Variable(torch.zeros(1, 512)).type(FloatTensor)
             cx = torch.zeros(1, 512)
             hx = torch.zeros(1, 512)
         else:
-            # cx = Variable(cx.data).type(FloatTensor)
-            # hx = Variable(hx.data).type(FloatTensor)
             cx = cx.detach()
             hx = hx.detach()
 
@@ -126,27 +135,24 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
             entropy = -(log_prob * prob).sum(1, keepdim=True)
             entropies.append(entropy)
 
-            # if select_sample:
-                # action = prob.multinomial(num_samples=1).data
+            if select_sample:
                 # action = prob.multinomial(num_samples=1).detach()
-            # else:
-                # action = prob.max(-1, keepdim=True)[1].data
+                action = torch.randint(0, len(ACTIONS), (1,1))
+            else:
                 # action = prob.max(-1, keepdim=True)[1].detach()
+                # action = prob.multinomial(num_samples=1).detach()
+                action = choose_action(model, state, hx, cx)
 
-            # log_prob = log_prob.gather(-1, Variable(action))
-            action = prob.multinomial(num_samples=1).detach()
             log_prob = log_prob.gather(1, action)
 
             action_out = ACTIONS[action]
 
-            # print(info)
-            # state, reward, done, info = env.step(action.numpy())
             state, reward, done, info = env.step(action.item())
             done = done or episode_length >= args.max_episode_length
             reward = max(min(reward, 15), -15)  # as per gym-super-mario-bros
 
             with lock:
-                counter.value += 1
+                counter.value += 1  # episodes?
 
             if done:
                 episode_length = 0
@@ -198,6 +204,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, select_sample
 
 
 def test(rank, args, shared_model, counter):
+
     torch.manual_seed(args.seed + rank)
 
     FloatTensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
@@ -217,14 +224,6 @@ def test(rank, args, shared_model, counter):
 
     state = env.reset()
     state = torch.from_numpy(state)
-
-    save_file = os.getcwd() + '/save/mario_performance.csv'
-
-    if not os.path.exists(save_file):
-        title = ['ID', 'Time', 'Steps', 'Total Reward', 'Episode Length']
-        with open(save_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow(title)
 
     start_time = time.time()
     reward_sum = 0
@@ -255,6 +254,15 @@ def test(rank, args, shared_model, counter):
         action_out = ACTIONS[action]
 
         state, reward, done, info = env.step(action.item())
+
+        save_file = os.getcwd() + f'/save/{args.model_id}_performance.csv'
+
+        if not os.path.exists(save_file):
+            headers = ['ID', 'Time', 'Steps', 'Total Reward', 'Episode Length', 'coins', 'flag_get', 'life', 'score', 'stage', 'status', 'time', 'world', 'x_pos']
+            with open(save_file, 'a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(headers)
+
         env.render()
         done = done or episode_length >= args.max_episode_length
 
@@ -267,11 +275,10 @@ def test(rank, args, shared_model, counter):
 
         if done:
             stop_time = time.time()
-            print("{} | ID: {}, Time: {}, Num Steps: {}, FPS: {:.2f}, Reward: {:.2f}, Episode Length: {}, Progress: {: 3.2f}%".format(
+            print("{} | ID: {}, Time: {}, FPS: {:4.2f}, Reward: {:6.2f}, Episode Length: {:4d}, Progress: {:3.2f}%".format(
                     args.env_name,
                     args.model_id,
-                    time.strftime("%Hh %Mm %Ss", time.gmtime(stop_time - start_time)),
-                    counter.value,
+                    time.strftime("%H:%M:%Ss", time.gmtime(stop_time - start_time)),
                     counter.value / (stop_time - start_time),
                     reward_sum,
                     episode_length,
@@ -281,18 +288,27 @@ def test(rank, args, shared_model, counter):
             )
 
             data = [
-                args.model_id,
-                stop_time - start_time,
-                counter.value,
-                counter.value / (stop_time - start_time),
+                args.model_id,  # ID
+                stop_time - start_time,  # Time
+                counter.value,  # Episodes?
                 reward_sum,
                 episode_length,
+                info['coins'],
+                info['flag_get'],
+                info['life'],
+                info['score'],
+                info['stage'],
+                info['status'],
+                info['time'],
+                info['world'],
+                info['x_pos'],
             ]
 
             with open(save_file, 'a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerows([data])
 
+            time.sleep(3.)
             reward_sum = 0
             episode_length = 0
             actions.clear()
