@@ -1,1 +1,1 @@
-from models.atari_dqn import AtariDQN
+from models.actor_critic import ActorCritic

@@ -1,4 +1,4 @@
-gym
-# torch>=1.0.0
-torchvision
-gym_super_mario_bros
+pytorch==1.0.0.dev20181123
+torchvision>=0.2.1
+gym==0.10.9
+setuptools==40.5.0
