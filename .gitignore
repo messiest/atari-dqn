@@ -3,6 +3,10 @@ NOTES.md
 playback/
 __TEST__.py
 deprecated/
+checkpoints/
+logs/
+notebooks/
+presentations/
 
 # macOS
 .DS_Store
