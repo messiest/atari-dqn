@@ -13,8 +13,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from models import ActorCritic
-from mario_actions import ACTIONS
-from mario_wrapper import create_mario_env
+from env_wrappers import create_atari_environment
 from optimizers import SharedAdam
 from utils import FontColor, save_checkpoint, get_epsilon, setup_logger
 
@@ -33,7 +32,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
     text_color = FontColor.RED if select_sample else FontColor.GREEN
     print(text_color + f"Process: {rank: 3d} | {'Sampling' if select_sample else 'Decision'} | Device: {str(device).upper()}", FontColor.END)
 
-    env = create_mario_env(args.env_name, ACTIONS[args.move_set])
+    env = create_atari_environment(args.env_name)
     observation_space = env.observation_space.shape[0]
     action_space = env.action_space.n
 
@@ -53,7 +52,6 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
     state = torch.from_numpy(state)
     done = True
 
-    episode_length = 0
     for t in count(start=args.start_step):
         if t % args.save_interval == 0 and t > 0:
             save_checkpoint(shared_model, optimizer, args, t)
@@ -73,6 +71,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
         rewards = []
         entropies = []
 
+        episode_length = 0
         for step in range(args.num_steps):
             episode_length += 1
 
@@ -113,7 +112,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
 
             log_prob = log_prob.gather(-1, action)
 
-            action_out = ACTIONS[args.move_set][action.item()]
+            # action_out = ACTIONS[args.move_set][action.item()]
 
             state, reward, done, info = env.step(action.item())
 
@@ -144,12 +143,12 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
 
         loss = gae(R, rewards, values, log_probs, entropies, args)
 
-        loss_logger.info({'rank': rank, 'sampling': select_sample, 'loss': loss.item()})
+        loss_logger.info({'episode': t, 'rank': rank, 'sampling': select_sample, 'loss': loss.item()})
 
         optimizer.zero_grad()
 
         (loss).backward()
-        # loss.backward()
+
         nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
         ensure_shared_grads(model, shared_model)

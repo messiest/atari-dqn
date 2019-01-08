@@ -13,8 +13,7 @@ import torch.nn.functional as F
 from emoji import emojize
 
 from models import ActorCritic
-from mario_actions import ACTIONS
-from mario_wrapper import create_mario_env
+from env_wrappers import create_atari_environment
 from optimizers import SharedAdam
 from utils import FontColor, decode_info, setup_logger
 
@@ -31,7 +30,7 @@ def test(rank, args, shared_model, counter, device):
 
     # torch.manual_seed(args.seed + rank)
 
-    env = create_mario_env(args.env_name, ACTIONS[args.move_set])
+    env = create_atari_environment(args.env_name)
     if args.record:
         if not os.path.exists(f'playback/{args.env_name}/'):
             os.makedirs(f'playback/{args.env_name}/{args.model_id}', exist_ok=True)
@@ -70,9 +69,6 @@ def test(rank, args, shared_model, counter, device):
 
         prob = F.softmax(logit, dim=-1)
         action = prob.max(-1, keepdim=True)[1]
-        # action = prob.max(-1, keepdim=True)[1].cpu().numpy()  #  .data.numpy()
-
-        action_out = ACTIONS[args.move_set][action.item()]
 
         state, reward, done, info = env.step(action.item())
 
@@ -87,29 +83,23 @@ def test(rank, args, shared_model, counter, device):
             'reward': reward_sum,
             'done': done,
         }
-        info_log.update(decode_info(env))
         info_logger.info(info_log)
 
-        print(
-            f"{emojize(':mushroom:')} World {info['world']}-{info['stage']} | {emojize(':video_game:')}: [ {' + '.join(action_out):^13s} ] | ",
-            end='\r',
-        )
+        print(f"{emojize(':video_game:', use_aliases=True)} | ", end='\r')
 
         env.render()
 
-        actions.append(action[0, 0])
+        actions.append(action.item())
 
         if done:
             t = time.time() - start_time
 
             print(
-                f"{emojize(':mushroom:')} World {info['world']}-{info['stage']} |" + \
-                f" {emojize(':video_game:')}: [ {' + '.join(action_out):^13s} ] | " + \
+                f"{emojize(':video_game:', use_aliases=True)} | " + \
                 f"ID: {args.model_id}, " + \
                 f"Time: {time.strftime('%H:%M:%S', time.gmtime(t)):^9s}, " + \
                 f"FPS: {counter.value/t: 6.2f}, " + \
-                f"Reward: {reward_sum: 10.2f}, " + \
-                f"Progress: {(info['x_pos'] / 3225) * 100: 3.2f}%",
+                f"Reward: {reward_sum: 10.2f}",
                 end='\r',
                 flush=True,
             )
