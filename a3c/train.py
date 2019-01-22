@@ -27,7 +27,7 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
     # logging
     log_dir = f'logs/{args.env_name}/{args.model_id}/{args.uuid}/'
     loss_logger = setup_logger('loss', log_dir, f'loss.log')
-    action_logger = setup_logger('actions', log_dir, f'actions.log')
+    # action_logger = setup_logger('actions', log_dir, f'actions.log')
 
     text_color = FontColor.RED if select_sample else FontColor.GREEN
     print(text_color + f"Process: {rank: 3d} | {'Sampling' if select_sample else 'Decision'} | Device: {str(device).upper()}", FontColor.END)
@@ -99,11 +99,11 @@ def train(rank, args, shared_model, counter, lock, optimizer=None, device='cpu',
                 action = prob.max(-1, keepdim=True)[1]
                 reason = 'choice'
 
-            action_logger.info({
-                'rank': rank,
-                'action': action.item(),
-                'reason': reason,
-                })
+            # action_logger.info({
+            #     'rank': rank,
+            #     'action': action.item(),
+            #     'reason': reason,
+            #     })
 
 
             if torch.cuda.is_available():

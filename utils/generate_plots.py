@@ -16,7 +16,7 @@ parser.add_argument('--log-dir', type=str, default='logs/')
 args = parser.parse_args()
 
 
-def plot_episode_results(args, window=500):
+def plot_episode_results(args, window=100):
     print(f"Plotting {args.model_id}'s results...")
 
     log_dir = os.path.join(args.log_dir, args.env_name)
@@ -46,7 +46,7 @@ def plot_episode_results(args, window=500):
         plt.savefig(os.path.join(save_dir, 'results.png'))
 
 
-def plot_episode_loss(args, window=500):
+def plot_episode_loss(args, window=1000):
     print(f"Plotting {args.model_id}'s loss...")
 
     log_dir = os.path.join(args.log_dir, args.env_name)

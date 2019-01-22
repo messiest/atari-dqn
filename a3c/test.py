@@ -52,7 +52,7 @@ def test(rank, args, shared_model, counter, device):
     episode_length = 0
     actions = deque(maxlen=4000)
     start_time = time.time()
-    while True:
+    for episode in count():
         episode_length += 1
         # shared model sync
         if done:
@@ -78,7 +78,8 @@ def test(rank, args, shared_model, counter, device):
             'id': args.model_id,
             'algorithm': args.algorithm,
             'greedy-eps': args.greedy_eps,
-            'episode': counter.value,
+            'episode': episode,
+            'total_episodes': counter.value,
             'episode_length': episode_length,
             'reward': reward_sum,
             'done': done,
@@ -97,9 +98,10 @@ def test(rank, args, shared_model, counter, device):
             print(
                 f"{emojize(':video_game:', use_aliases=True)} | " + \
                 f"ID: {args.model_id}, " + \
+                f"Total Episodes: {counter.value}, " + \
                 f"Time: {time.strftime('%H:%M:%S', time.gmtime(t)):^9s}, " + \
-                f"FPS: {counter.value/t: 6.2f}, " + \
-                f"Reward: {reward_sum: 10.2f}",
+                f"FPS: {episode_length/t: 6.2f}, " + \
+                f"Reward: {reward_sum: 10.0f}",
                 end='\r',
                 flush=True,
             )
